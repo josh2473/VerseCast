@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VerseCast</title>
+<style>
+  :root { --blue: #1557d6; --blue-dark: #0b3a94; --blue-soft: #e8f0ff; --line: #d5e1f7; --ink: #10213f; --muted: #5b6b87; }
+  * { box-sizing: border-box; }
+  body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: #fff; color: var(--ink); font: 15px system-ui, sans-serif; }
+  header { display: flex; gap: 8px; align-items: center; padding: 10px 14px; background: var(--blue); color: #fff; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0 12px 0 0; }
+  button { background: #fff; color: var(--blue); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; font: 600 14px system-ui, sans-serif; cursor: pointer; }
+  button:hover { background: var(--blue-soft); }
+  button.on { background: #d62839; color: #fff; border-color: #d62839; }
+  label { display: flex; gap: 6px; align-items: center; }
+  select { background: #fff; color: var(--blue-dark); border: 1px solid var(--line); border-radius: 6px; padding: 7px 8px; font: 14px system-ui, sans-serif; max-width: 260px; }
+  #status { margin-left: auto; font-size: 13px; opacity: 0.9; }
+  main { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); min-height: 0; }
+  section { background: #fff; padding: 14px; display: flex; flex-direction: column; min-height: 0; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--blue); margin: 0 0 8px; }
+  #transcript { flex: 1; overflow-y: auto; line-height: 1.5; }
+  #transcript p { margin: 0 0 6px; }
+  #transcript mark { background: var(--blue-soft); color: var(--blue-dark); font-weight: 600; border-radius: 3px; padding: 0 3px; }
+  #interim { color: var(--muted); }
+  #search { width: 100%; padding: 9px 11px; border-radius: 6px; border: 1px solid var(--line); background: #fff; color: inherit; font: inherit; margin-bottom: 12px; }
+  #search:focus { outline: 2px solid var(--blue); }
+  #preview { background: linear-gradient(160deg, var(--blue-dark), var(--blue)); color: #fff; border-radius: 8px; padding: 14px; min-height: 120px; max-height: 35vh; overflow-y: auto; margin-bottom: 8px; font-family: Georgia, serif; font-size: 17px; line-height: 1.4; }
+  #preview b { display: block; font-family: system-ui, sans-serif; margin-top: 8px; opacity: 0.85; }
+  .empty { opacity: 0.6; }
+  .row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .row button, .mini button { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .row button:hover, .mini button:hover { background: var(--blue-dark); }
+  #detected { flex: 1; overflow-y: auto; list-style: none; margin: 0; padding: 0; }
+  #detected li { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; gap: 10px; }
+  #detected li:hover { background: var(--blue-soft); }
+  #detected li.live { background: var(--blue); color: #fff; }
+  #detected small { opacity: 0.6; white-space: nowrap; }
+  #detected li.guess:not(.live) { color: var(--muted); font-style: italic; }
+  #transcript mark.guess { background: #fff; border: 1px dashed var(--blue); }
+  @media (max-width: 700px) { main { grid-template-columns: 1fr; } }
+
+  /* ?dock — OBS custom browser dock. OBS's browser can't do speech recognition, so listening stays in Edge. */
+  .dock body { font-size: 13px; }
+  .dock header { padding: 6px 8px; gap: 6px; }
+  .dock header h1 { font-size: 14px; }
+  .dock #openOut, .dock #openMini, .dock #mic, .dock #lang, .dock #listen, .dock header label { display: none; }
+  .dock #status { font-size: 11px; }
+  .dock main { grid-template-columns: 1fr; }
+  .dock main > section:first-child { display: none; }
+  .dock section { padding: 8px; }
+  .dock #preview { font-size: 14px; min-height: 70px; max-height: 30vh; }
+  .dock .row { margin-bottom: 8px; }
+
+  /* always-on-top mini window */
+  .mini { margin: 0; padding: 10px; height: 100vh; display: flex; flex-direction: column; gap: 8px; }
+  .mini .now { background: linear-gradient(160deg, var(--blue-dark), var(--blue)); color: #fff; border-radius: 8px; padding: 10px; flex: 1; overflow: hidden; font: 14px/1.35 Georgia, serif; }
+  .mini .now b { display: block; font: 700 16px system-ui, sans-serif; margin-bottom: 4px; }
+  .mini .btns { display: flex; gap: 6px; }
+  .mini .btns button { flex: 1; padding: 6px 4px; }
+  .mini .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mini .chips button { background: var(--blue-soft); color: var(--blue-dark); border-color: var(--line); padding: 4px 8px; font-size: 12px; }
+  .mini .chips button.live { background: var(--blue); color: #fff; }
+  .mini .listen.on { background: #d62839; border-color: #d62839; }
+</style>
+</head>
+<body>
+<header>
+  <h1>VerseCast</h1>
+  <button id="openOut">Open projector</button>
+  <button id="openMini">Mini window (always on top)</button>
+  <select id="mic" title="Input source"><option value="">Default microphone</option></select>
+  <select id="lang" title="Speech language / accent">
+    <option value="en-GH">English (Ghana)</option>
+    <option value="en-NG">English (Nigeria)</option>
+    <option value="en-GB">English (UK)</option>
+    <option value="en-US">English (US)</option>
+  </select>
+  <button id="listen">Start listening</button>
+  <button id="clear">Clear screen</button>
+  <label><input type="checkbox" id="auto" checked> Auto-show detected verses</label>
+  <span id="status">Not listening</span>
+</header>
+<main>
+  <section>
+    <h2>Live transcript</h2>
+    <div id="transcript"><span id="interim"></span></div>
+  </section>
+  <section>
+    <input id="search" placeholder="Type a reference or words from a verse, e.g. John 3:16 or all is vanity" autocomplete="off">
+    <h2>On screen</h2>
+    <div id="preview"><span class="empty">Nothing showing</span></div>
+    <div class="row">
+      <button id="prev" title="Left arrow">◀ Prev verse</button>
+      <button id="next" title="Right arrow">Next verse ▶</button>
+    </div>
+    <h2>Detected references</h2>
+    <ul id="detected"></ul>
+  </section>
+</main>
+<script src="kjv.js"></script>
+<script src="parse.js"></script>
+<script src="predict.js"></script>
+<script>
+  const $ = id => document.getElementById(id);
+  const INDEX = Predict.buildIndex(KJV);
+  const DOCK = new URLSearchParams(location.search).has("dock"); // compact layout for an OBS custom browser dock
+  document.documentElement.classList.toggle("dock", DOCK);
+  let out = null, mini = null, current = null, lastFinal = "";
+  let detected = []; // [{ref, predicted, time}], newest first
+  const me = Math.random().toString(36).slice(2);
+
+  // ---- projector ----
+  // the server relays this to every projector page (popup, OBS Browser Sources) and to the other control pages (OBS dock)
+  function send() {
+    const msg = { from: me, ref: current, recent: detected.slice(0, 20) };
+    if (current) Object.assign(msg, { label: Parse.label(current), lines: Parse.lookup(KJV, current) });
+    fetch("/state", { method: "POST", body: JSON.stringify(msg) })
+      .catch(() => { $("status").textContent = "VerseCast server isn't running — start it with Start VerseCast.bat"; });
+  }
+  // follow changes made from another control page, e.g. the OBS dock
+  new EventSource("/events").onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (!msg || msg.from === me) return;
+    current = msg.ref || null;
+    detected = msg.recent || [];
+    renderDetected();
+    refresh(false);
+  };
+  // full screen on the 2nd screen when there is one, otherwise a window you can drag
+  $("openOut").onclick = async () => {
+    const r = await fetch("/projector", { method: "POST" }).catch(() => null);
+    if (r && r.ok) return;
+    out = window.open("output.html", "versecast-output", "popup,width=1280,height=720");
+    if (!out) alert("Your browser blocked the projector window. Allow pop-ups for this page and try again.");
+  };
+  if (!DOCK) fetch("/projector", { method: "POST" }).catch(() => {}); // auto-open on the 2nd screen at start-up
+
+  function verseText(lines) {
+    return lines.map(l => (lines.length > 1 ? l.v + " " : "") + l.text).join(" ");
+  }
+
+  function refresh(broadcast = true) {
+    const label = current && Parse.label(current);
+    if (current) {
+      $("preview").replaceChildren(verseText(Parse.lookup(KJV, current)), Object.assign(document.createElement("b"), { textContent: label }));
+    } else {
+      $("preview").innerHTML = '<span class="empty">Nothing showing</span>';
+    }
+    for (const li of $("detected").children) li.classList.toggle("live", li.dataset.label === label);
+    renderMini();
+    if (broadcast) send();
+  }
+
+  function show(ref) {
+    if (!Parse.lookup(KJV, ref)) return false;
+    current = ref;
+    refresh();
+    return true;
+  }
+  function clearScreen() { current = null; refresh(); }
+  $("clear").onclick = clearScreen;
+
+  function step(dir) {
+    if (!current) return;
+    const ch = KJV[current.book][current.chapter];
+    const v = dir > 0 ? current.verseEnd + 1 : current.verse - 1;
+    if (ch[v]) show({ ...current, verse: v, verseEnd: v });
+  }
+  $("prev").onclick = () => step(-1);
+  $("next").onclick = () => step(1);
+  function onKey(e) {
+    if (e.target.tagName === "INPUT") return;
+    if (e.key === "ArrowRight") step(1);
+    if (e.key === "ArrowLeft") step(-1);
+    if (e.key === "Escape") clearScreen();
+  }
+  document.addEventListener("keydown", onKey);
+
+  // ---- detected list ----
+  // predicted = guessed from quoted words, so it's listed but never auto-shown
+  function addDetected(ref, predicted = false) {
+    const label = Parse.label(ref);
+    if (!Parse.lookup(KJV, ref)) return;
+    if (predicted && detected.slice(0, 5).some(d => Parse.label(d.ref) === label)) return;
+    if (!detected[0] || Parse.label(detected[0].ref) !== label) {
+      detected.unshift({ ref, predicted, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) });
+      renderDetected();
+    }
+    if ($("auto").checked && !predicted) show(ref); else refresh();
+  }
+
+  function renderDetected() {
+    $("detected").replaceChildren(...detected.map(({ ref, predicted, time }) => {
+      const li = document.createElement("li");
+      li.dataset.label = Parse.label(ref);
+      li.classList.toggle("guess", predicted);
+      li.append(Parse.label(ref), Object.assign(document.createElement("small"), { textContent: (predicted ? "quoted? · " : "") + time }));
+      li.title = Parse.lookup(KJV, ref).map(l => l.text).join(" ");
+      li.onclick = () => show(ref);
+      return li;
+    }));
+  }
+
+  $("search").addEventListener("keydown", e => {
+    if (e.key !== "Enter") return;
+    const [ref] = Parse.findRefs(e.target.value);
+    const guesses = ref ? [] : Predict.predict(INDEX, e.target.value);
+    if (ref && Parse.lookup(KJV, ref)) { addDetected(ref); show(ref); e.target.value = ""; }
+    else if (guesses.length) { guesses.slice().reverse().forEach(g => addDetected(g.ref, true)); show(guesses[0].ref); e.target.value = ""; }
+    else e.target.style.borderColor = "#d62839", setTimeout(() => e.target.style.borderColor = "", 800);
+  });
+
+  // ---- always-on-top mini window (Document Picture-in-Picture, Edge/Chrome) ----
+  $("openMini").onclick = async () => {
+    if (!("documentPictureInPicture" in window)) return alert("The always-on-top window needs a recent Microsoft Edge or Google Chrome.");
+    if (mini) return mini.focus();
+    mini = await documentPictureInPicture.requestWindow({ width: 340, height: 260 });
+    mini.document.head.append(document.querySelector("style").cloneNode(true));
+    mini.document.title = "VerseCast";
+    mini.document.body.className = "mini";
+    mini.document.addEventListener("keydown", onKey);
+    mini.addEventListener("pagehide", () => { mini = null; });
+    renderMini();
+  };
+
+  function renderMini() {
+    if (!mini) return;
+    const d = mini.document, el = (tag, props, ...kids) => { const n = Object.assign(d.createElement(tag), props); n.append(...kids); return n; };
+    const now = current
+      ? el("div", { className: "now" }, el("b", { textContent: Parse.label(current) }), verseText(Parse.lookup(KJV, current)))
+      : el("div", { className: "now" }, el("span", { className: "empty", textContent: "Nothing showing" }));
+    const label = current && Parse.label(current);
+    d.body.replaceChildren(
+      now,
+      el("div", { className: "btns" },
+        el("button", { textContent: "◀", title: "Previous verse", onclick: () => step(-1) }),
+        el("button", { textContent: "▶", title: "Next verse", onclick: () => step(1) }),
+        el("button", { textContent: "Clear", onclick: clearScreen }),
+        el("button", { textContent: listening ? "Stop" : "Listen", className: "listen" + (listening ? " on" : ""), onclick: () => $("listen").click() })),
+      el("div", { className: "chips" }, ...detected.slice(0, 6).map(({ ref }) =>
+        el("button", { textContent: Parse.label(ref), className: Parse.label(ref) === label ? "live" : "", onclick: () => show(ref) }))));
+  }
+
+  // ---- speech ----
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null, listening = false;
+
+  // a reference heard in the last 15s isn't re-shown, so live + final results (or a repeat) don't fight the operator
+  const heard = new Map();
+  function fresh(ref) {
+    const label = Parse.label(ref), now = Date.now();
+    if (now - (heard.get(label) || 0) < 15000) return false;
+    heard.set(label, now);
+    return true;
+  }
+
+  // act on words while they're still being spoken; drop the last word in case it's a half-said number ("John 3 1…6")
+  function onInterim(text) {
+    const done = text.trim().split(/\s+/).slice(0, -1).join(" ");
+    Parse.findRefs(done).filter(fresh).forEach(r => addDetected(r));
+  }
+
+  function onFinal(text) {
+    const p = document.createElement("p");
+    p.textContent = text;
+    $("transcript").insertBefore(p, $("interim"));
+    // join with the previous phrase so "John 3" + "16" still matches, but skip refs already found there
+    const before = Parse.findRefs(lastFinal).map(Parse.label);
+    const found = Parse.findRefs(lastFinal + " " + text).filter(r => {
+      const i = before.indexOf(Parse.label(r));
+      if (i === -1) return true;
+      before.splice(i, 1);
+      return false;
+    });
+    // no reference spoken? see if they're quoting a verse word-for-word
+    const already = Predict.predict(INDEX, lastFinal).map(g => Parse.label(g.ref));
+    const guesses = found.length ? [] : Predict.predict(INDEX, lastFinal + " " + text).filter(g => !already.includes(Parse.label(g.ref)));
+    lastFinal = text;
+    for (const r of found) p.append(" ", Object.assign(document.createElement("mark"), { textContent: Parse.label(r) }));
+    for (const g of guesses) p.append(" ", Object.assign(document.createElement("mark"), { className: "guess", textContent: "≈ " + Parse.label(g.ref) }));
+    found.filter(fresh).forEach(r => addDetected(r));
+    guesses.slice().reverse().forEach(g => addDetected(g.ref, true));
+    $("transcript").scrollTop = $("transcript").scrollHeight;
+  }
+
+  function setListening(on) {
+    listening = on;
+    $("listen").textContent = on ? "Stop listening" : "Start listening";
+    $("listen").classList.toggle("on", on);
+    $("status").textContent = on ? "Listening…" : "Not listening";
+    renderMini();
+    if (on) {
+      rec = new SR();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = $("lang").value;
+      rec.onresult = e => {
+        let interim = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) onFinal(e.results[i][0].transcript.trim());
+          else interim += e.results[i][0].transcript;
+        }
+        $("interim").textContent = interim;
+        if (interim) onInterim(interim);
+      };
+      rec.onerror = e => {
+        $("status").textContent = "Mic error: " + e.error;
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") setListening(false);
+      };
+      const go = () => track ? rec.start(track) : rec.start();
+      rec.onend = () => { if (listening) go(); }; // browser stops after silence; keep going
+      openMic().then(go, err => {
+        setListening(false);
+        $("status").textContent = "Can't open that input: " + err.message;
+      });
+    } else if (rec) {
+      rec.onend = null;
+      rec.stop();
+      if (track) track.stop(), track = null;
+    }
+  }
+
+  // ---- input source ----
+  let track = null; // null = browser's default mic
+  let micNamesKnown = false;
+  async function openMic() {
+    const id = $("mic").value;
+    if (!id) return;
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: id } } });
+    track = stream.getAudioTracks()[0];
+  }
+
+  async function loadMics() {
+    const sel = $("mic");
+    let saved = sel.value;
+    try { saved = saved || localStorage.getItem("versecast-mic") || ""; } catch {}
+    const mics = (await navigator.mediaDevices.enumerateDevices())
+      .filter(d => d.kind === "audioinput" && d.deviceId && d.deviceId !== "default" && d.deviceId !== "communications");
+    micNamesKnown = mics.some(d => d.label);
+    sel.replaceChildren(new Option("Default microphone", ""), ...mics.map((d, i) => new Option(d.label || "Microphone " + (i + 1), d.deviceId)));
+    sel.value = mics.some(d => d.deviceId === saved) ? saved : "";
+  }
+
+  // device names stay hidden until the mic has been allowed once, so ask when the list is opened
+  $("mic").addEventListener("pointerdown", async () => {
+    if (micNamesKnown) return;
+    try { (await navigator.mediaDevices.getUserMedia({ audio: true })).getTracks().forEach(t => t.stop()); } catch {}
+    loadMics();
+  });
+  $("mic").onchange = () => {
+    try { localStorage.setItem("versecast-mic", $("mic").value); } catch {}
+    if (listening) { setListening(false); setListening(true); }
+  };
+  navigator.mediaDevices.addEventListener("devicechange", loadMics);
+
+  try { $("lang").value = localStorage.getItem("versecast-lang") || "en-GH"; } catch {}
+  $("lang").onchange = () => {
+    try { localStorage.setItem("versecast-lang", $("lang").value); } catch {}
+    if (listening) { setListening(false); setListening(true); }
+  };
+  loadMics();
+  $("listen").onclick = () => {
+    if (!SR) return alert("Speech recognition needs Microsoft Edge or Google Chrome.");
+    setListening(!listening);
+  };
+</script>
+</body>
+</html>

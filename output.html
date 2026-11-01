@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VerseCast Projector</title>
+<style>
+  html, body { margin: 0; height: 100%; background: radial-gradient(ellipse at top, #1f6ff0, #0b2f7a 70%); color: #fff; font-family: Georgia, "Times New Roman", serif; overflow: hidden; cursor: none; }
+  #box { position: absolute; inset: 6vh 6vw 16vh; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  #text { text-align: center; line-height: 1.3; text-shadow: 0 2px 8px #000; }
+  #text sup { font-size: 0.5em; opacity: 0.7; margin-right: 0.2em; }
+  #ref { position: absolute; left: 0; right: 0; bottom: 5vh; text-align: center; font: 600 5vh system-ui, sans-serif; letter-spacing: 0.05em; color: #fff; opacity: 0.85; }
+  #hint { position: absolute; top: 1em; left: 1em; font: 14px system-ui, sans-serif; color: #fff; opacity: 0.6; }
+
+  /* ?overlay — transparent lower third for OBS / NDI, the blue band only appears while a verse is showing */
+  .overlay, .overlay body { background: transparent; }
+  .overlay #box { inset: auto 5vw 15vh; height: 24vh; padding: 2vh 3vw; border-radius: 1.5vh 1.5vh 0 0; background: rgba(11, 47, 122, 0.88); }
+  .overlay #ref { left: 5vw; right: 5vw; bottom: 7vh; height: 8vh; line-height: 8vh; font-size: 3.6vh; background: #1557d6; border-radius: 0 0 1.5vh 1.5vh; opacity: 1; }
+  .overlay #text { text-shadow: none; }
+  .overlay.empty #box, .overlay.empty #ref { display: none; }
+</style>
+</head>
+<body>
+<div id="hint" hidden>Drag this window to the projector screen, then double-click for full screen.</div>
+<div id="box"><div id="text"></div></div>
+<div id="ref"></div>
+<script>
+  const box = document.getElementById("box"), text = document.getElementById("text"), ref = document.getElementById("ref");
+  const root = document.documentElement;
+  root.classList.toggle("overlay", new URLSearchParams(location.search).has("overlay"));
+  document.getElementById("hint").hidden = !window.opener;
+
+  function fit() {
+    let size = root.classList.contains("overlay") ? 5 : 9;
+    text.style.fontSize = size + "vh";
+    while (size > 1.5 && (text.scrollHeight > box.clientHeight || text.scrollWidth > box.clientWidth)) {
+      size -= 0.25;
+      text.style.fontSize = size + "vh";
+    }
+  }
+
+  function render(msg) {
+    text.replaceChildren();
+    root.classList.toggle("empty", !(msg && msg.lines));
+    ref.textContent = msg && msg.label ? msg.label + "  ·  KJV" : "";
+    if (!msg || !msg.lines) return;
+    for (const l of msg.lines) {
+      if (msg.lines.length > 1) text.append(Object.assign(document.createElement("sup"), { textContent: l.v }));
+      text.append(l.text + " ");
+    }
+    fit();
+  }
+
+  // EventSource reconnects by itself if the server restarts
+  new EventSource("/events" + location.search).onmessage = e => render(JSON.parse(e.data));
+  window.addEventListener("resize", fit);
+  document.addEventListener("dblclick", () => {
+    document.getElementById("hint").hidden = true;
+    document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  });
+</script>
+</body>
+</html>

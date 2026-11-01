@@ -1,0 +1,83 @@
+// Serves VerseCast on http://localhost:8765 — Edge/Chrome only allow speech recognition on http(s), not file://.
+// Also relays what's on screen: the operator POSTs /state, every projector page (popup, OBS Browser Source) listens on /events.
+const http = require("http"), fs = require("fs"), path = require("path"), { execFile, spawn } = require("child_process");
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8" };
+const EDGE = path.join(process.env["ProgramFiles(x86)"], "Microsoft", "Edge", "Application", "msedge.exe");
+
+let state = "null";
+const listeners = new Set();
+const projectors = new Set(); // /events connections from the 2nd-screen projector window
+
+const ps = (cmd, cb) => execFile("powershell", ["-NoProfile", "-Command", cmd], (err, out) => cb(err ? null : out.trim() || null));
+
+// Top-left "x,y" of the first non-primary screen, or null when only one screen is connected.
+const secondScreen = cb => ps("Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Screen]::AllScreens | ? { -not $_.Primary } | select -First 1 | % { '{0},{1}' -f $_.Bounds.X, $_.Bounds.Y }", cb);
+
+// Edge's leftover background process for the projector profile (it can outlive its closed window).
+const KILL_OLD = `Get-CimInstance Win32_Process -Filter "Name='msedge.exe'" | ? { $_.CommandLine -match 'VerseCast\\\\projector' } | % { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
+
+// A full-screen window on a 2nd monitor drops behind that monitor's taskbar when you click the main screen, so pin it on top.
+const TOPMOST = `Add-Type -Namespace VC -Name W -MemberDefinition '
+[DllImport("user32.dll")] public static extern IntPtr FindWindow(string c, string t);
+[DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr h, IntPtr a, int x, int y, int cx, int cy, uint f);';
+$h = [VC.W]::FindWindow([NullString]::Value, 'VerseCast Projector'); if ($h -ne [IntPtr]::Zero) { [VC.W]::SetWindowPos($h, [IntPtr](-1), 0, 0, 0, 0, 0x13) | Out-Null; 'ok' }`;
+// re-applied a few times: Edge switching into full screen after the page loads clears it
+const keepOnTop = () => [500, 2000, 5000].forEach(ms => setTimeout(() => ps(TOPMOST, () => {}), ms));
+
+// A browser page can't put itself full screen on another monitor, so launch Edge there as an F11-full-screen app window.
+// (Kiosk mode leaves it 1px short.) Its own profile folder makes it a separate Edge process,
+// so the position/full-screen flags apply even while Edge is already open.
+let launchedAt = 0;
+function openProjector(cb) {
+  if (projectors.size || Date.now() - launchedAt < 10000) return cb(true); // showing, or still starting up
+  secondScreen(pos => {
+    if (!pos) return cb(false);
+    const [x, y] = pos.split(",").map(Number);
+    launchedAt = Date.now();
+    ps(KILL_OLD, () => {
+      spawn(EDGE, ["--app=http://localhost:8765/output.html?screen2", "--start-fullscreen", "--no-first-run",
+        "--user-data-dir=" + path.join(process.env.LOCALAPPDATA, "VerseCast", "projector"),
+        `--window-position=${x + 100},${y + 100}`], { stdio: "ignore" }).on("error", () => { launchedAt = 0; });
+      cb(true);
+    });
+  });
+}
+
+http.createServer((req, res) => {
+  const url = req.url.split("?")[0];
+
+  if (url === "/projector" && req.method === "POST") return openProjector(ok => res.writeHead(ok ? 204 : 404).end());
+
+  if (url === "/state" && req.method === "POST") {
+    let body = "";
+    req.on("data", c => { body += c; if (body.length > 1e6) req.destroy(); });
+    req.on("end", () => {
+      try { JSON.parse(body); } catch { return res.writeHead(400).end(); }
+      state = body;
+      for (const l of listeners) l.write(`data: ${state}\n\n`);
+      res.writeHead(204).end();
+    });
+    return;
+  }
+
+  if (url === "/events") {
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+    res.write(`data: ${state}\n\n`);
+    listeners.add(res);
+    if (req.url.includes("screen2")) projectors.add(res), keepOnTop();
+    req.on("close", () => { listeners.delete(res); projectors.delete(res); });
+    return;
+  }
+
+  const file = path.join(__dirname, path.normalize(decodeURIComponent(url)).replace(/^[\\/]+$/, "index.html"));
+  if (!file.startsWith(__dirname) || !TYPES[path.extname(file)]) return res.writeHead(404).end();
+  fs.readFile(file, (err, data) => {
+    if (err) return res.writeHead(404).end();
+    res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] }).end(data);
+  });
+})
+  .on("error", e => { if (e.code === "EADDRINUSE") process.exit(0); throw e; }) // already running from an earlier launch
+  .listen(8765, "127.0.0.1", () => {
+    console.log("VerseCast running at http://localhost:8765 - keep this window open");
+    openProjector(() => {}); // the projector closes with the server, so bring it back whenever the server starts
+  });
