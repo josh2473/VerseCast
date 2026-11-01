@@ -11,12 +11,22 @@
   #ref { position: absolute; left: 0; right: 0; bottom: 5vh; text-align: center; font: 600 5vh system-ui, sans-serif; letter-spacing: 0.05em; color: #fff; opacity: 0.85; }
   #hint { position: absolute; top: 1em; left: 1em; font: 14px system-ui, sans-serif; color: #fff; opacity: 0.6; }
 
-  /* ?overlay — transparent lower third for OBS / NDI, the blue band only appears while a verse is showing */
+  #ref .kjv { font-weight: 400; font-size: 0.8em; }
+
+  /* ?overlay — transparent lower third for OBS / NDI: bold reference above the verse, white text with a shadow, no box */
   .overlay, .overlay body { background: transparent; }
-  .overlay #box { inset: auto 5vw 15vh; height: 24vh; padding: 2vh 3vw; border-radius: 1.5vh 1.5vh 0 0; background: rgba(11, 47, 122, 0.88); }
-  .overlay #ref { left: 5vw; right: 5vw; bottom: 7vh; height: 8vh; line-height: 8vh; font-size: 3.6vh; background: #1557d6; border-radius: 0 0 1.5vh 1.5vh; opacity: 1; }
-  .overlay #text { text-shadow: none; }
-  .overlay.empty #box, .overlay.empty #ref { display: none; }
+  .overlay #box { inset: auto 6vw 20vh; height: 28vh; flex-direction: column; justify-content: flex-end; gap: 1.2vh; }
+  .overlay #ref { position: static; font: 700 4.6vh Georgia, "Times New Roman", serif; letter-spacing: 0; opacity: 1; }
+  .overlay #ref, .overlay #text { text-shadow: 0 0 3px #000, 0 2px 8px #000; }
+  .overlay.empty #box { display: none; }
+
+  /* "Full screen" layout in OBS: big centred text over a dimmed picture */
+  .overlay.big:not(.empty) body { background: rgba(0, 0, 0, 0.55); }
+  .overlay.big #box { inset: 8vh 8vw; height: auto; justify-content: center; gap: 3vh; }
+  .overlay.big #ref { font-size: 5.5vh; }
+
+  /* song lyrics keep their line breaks */
+  .song #text { white-space: pre-line; }
 </style>
 </head>
 <body>
@@ -26,13 +36,15 @@
 <script>
   const box = document.getElementById("box"), text = document.getElementById("text"), ref = document.getElementById("ref");
   const root = document.documentElement;
-  root.classList.toggle("overlay", new URLSearchParams(location.search).has("overlay"));
+  const OVERLAY = new URLSearchParams(location.search).has("overlay");
+  root.classList.toggle("overlay", OVERLAY);
+  if (OVERLAY) box.prepend(ref); // reference sits right above the verse
   document.getElementById("hint").hidden = !window.opener;
 
   function fit() {
-    let size = root.classList.contains("overlay") ? 5 : 9;
+    let size = !OVERLAY ? 9 : root.classList.contains("big") ? 8 : 4.6;
     text.style.fontSize = size + "vh";
-    while (size > 1.5 && (text.scrollHeight > box.clientHeight || text.scrollWidth > box.clientWidth)) {
+    while (size > 1.5 && (box.scrollHeight > box.clientHeight || text.scrollWidth > box.clientWidth)) {
       size -= 0.25;
       text.style.fontSize = size + "vh";
     }
@@ -40,8 +52,16 @@
 
   function render(msg) {
     text.replaceChildren();
-    root.classList.toggle("empty", !(msg && msg.lines));
-    ref.textContent = msg && msg.label ? msg.label + "  ·  KJV" : "";
+    const songSlide = msg && msg.song && msg.song.slides[msg.song.index];
+    root.classList.toggle("empty", !(msg && (msg.lines || songSlide)));
+    root.classList.toggle("big", !!(msg && msg.layout === "full"));
+    root.classList.toggle("song", !!songSlide);
+    if (songSlide) {
+      ref.replaceChildren(msg.song.name);
+      text.textContent = songSlide.text;
+      return fit();
+    }
+    ref.replaceChildren(...(msg && msg.label ? [msg.label + " ", Object.assign(document.createElement("span"), { className: "kjv", textContent: "(KJV)" })] : []));
     if (!msg || !msg.lines) return;
     for (const l of msg.lines) {
       if (msg.lines.length > 1) text.append(Object.assign(document.createElement("sup"), { textContent: l.v }));

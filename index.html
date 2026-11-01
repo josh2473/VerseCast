@@ -30,12 +30,25 @@
   .row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
   .row button, .mini button { background: var(--blue); color: #fff; border-color: var(--blue); }
   .row button:hover, .mini button:hover { background: var(--blue-dark); }
-  #detected { flex: 1; overflow-y: auto; list-style: none; margin: 0; padding: 0; }
-  #detected li { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; gap: 10px; }
-  #detected li:hover { background: var(--blue-soft); }
-  #detected li.live { background: var(--blue); color: #fff; }
-  #detected small { opacity: 0.6; white-space: nowrap; }
-  #detected li.guess:not(.live) { color: var(--muted); font-style: italic; }
+  [hidden] { display: none !important; }
+  .tabs { display: flex; gap: 6px; margin-bottom: 12px; align-items: center; }
+  .tabs .tab.on { background: var(--blue); color: #fff; border-color: var(--blue); }
+  .tabs select { margin-left: auto; }
+  .pane { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .songbar { display: flex; gap: 6px; margin-bottom: 8px; }
+  .songbar input, dialog input, dialog textarea { flex: 1; width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line); font: inherit; color: inherit; background: #fff; }
+  .list { flex: 1; overflow-y: auto; list-style: none; margin: 0 0 8px; padding: 0; }
+  #songList { flex: 0 1 auto; max-height: 28vh; }
+  .list li { padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; gap: 10px; }
+  .list li:hover { background: var(--blue-soft); }
+  .list li.live { background: var(--blue); color: #fff; }
+  .list small { opacity: 0.6; white-space: nowrap; }
+  .list li.guess:not(.live) { color: var(--muted); font-style: italic; }
+  #slideList li { display: block; white-space: pre-line; line-height: 1.35; }
+  #songTitle { display: flex; gap: 8px; align-items: center; }
+  #songTitle button { padding: 2px 8px; font-size: 11px; }
+  dialog { border: 1px solid var(--line); border-radius: 10px; width: min(560px, 92vw); }
+  dialog form { display: flex; flex-direction: column; gap: 10px; }
   #transcript mark.guess { background: #fff; border: 1px dashed var(--blue); }
   @media (max-width: 700px) { main { grid-template-columns: 1fr; } }
 
@@ -43,7 +56,8 @@
   .dock body { font-size: 13px; }
   .dock header { padding: 6px 8px; gap: 6px; }
   .dock header h1 { font-size: 14px; }
-  .dock #openOut, .dock #openMini, .dock #mic, .dock #lang, .dock #listen, .dock header label { display: none; }
+  .dock #openMini, .dock #mic, .dock #lang, .dock header label:not(#screen2Label) { display: none; }
+  .dock #listen.on { background: #d62839; border-color: #d62839; }
   .dock #status { font-size: 11px; }
   .dock main { grid-template-columns: 1fr; }
   .dock main > section:first-child { display: none; }
@@ -54,12 +68,12 @@
   .dock, .dock body { background: #1d1f26; }
   .dock header, .dock main, .dock section { background: transparent; }
   .dock body { color: #e6e6e6; }
-  .dock h2, .dock #status, .dock #detected li.guess:not(.live) { color: #9aa3b5; }
-  .dock #search { background: #1d1f26; border-color: #3c404b; color: #e6e6e6; }
+  .dock h2, .dock #status, .dock .list li.guess:not(.live) { color: #9aa3b5; }
+  .dock #search, .dock .songbar input, .dock select, .dock dialog, .dock dialog input, .dock dialog textarea { background: #1d1f26; border-color: #3c404b; color: #e6e6e6; }
   .dock #preview { background: #2b2e38; }
   .dock button, .dock .row button { background: #3c404b; border-color: #3c404b; color: #fff; }
-  .dock button:hover, .dock .row button:hover, .dock #detected li:hover { background: #4a4f5c; }
-  .dock #detected li.live { background: #284cb8; }
+  .dock button:hover, .dock .row button:hover, .dock .list li:hover { background: #4a4f5c; }
+  .dock .list li.live, .dock .tabs .tab.on { background: #284cb8; border-color: #284cb8; }
 
   /* always-on-top mini window */
   .mini { margin: 0; padding: 10px; height: 100vh; display: flex; flex-direction: column; gap: 8px; }
@@ -76,7 +90,7 @@
 <body>
 <header>
   <h1>VerseCast</h1>
-  <button id="openOut">Open projector</button>
+  <label id="screen2Label" title="Full-screen projector on the second screen"><input type="checkbox" id="screen2"> 2nd screen</label>
   <button id="openMini">Mini window (always on top)</button>
   <select id="mic" title="Input source"><option value="">Default microphone</option></select>
   <select id="lang" title="Speech language / accent">
@@ -96,17 +110,47 @@
     <div id="transcript"><span id="interim"></span></div>
   </section>
   <section>
-    <input id="search" placeholder="Type a reference or words from a verse, e.g. John 3:16 or all is vanity" autocomplete="off">
+    <div class="tabs">
+      <button id="tabBible" class="tab on">Bible</button>
+      <button id="tabSongs" class="tab">Songs</button>
+      <select id="layout" title="How verses and songs look in OBS">
+        <option value="lower">Lower third</option>
+        <option value="full">Full screen</option>
+      </select>
+    </div>
     <h2>On screen</h2>
     <div id="preview"><span class="empty">Nothing showing</span></div>
     <div class="row">
-      <button id="prev" title="Left arrow">◀ Prev verse</button>
-      <button id="next" title="Right arrow">Next verse ▶</button>
+      <button id="prev" title="Left arrow">◀ Prev</button>
+      <button id="next" title="Right arrow">Next ▶</button>
     </div>
-    <h2>Detected references</h2>
-    <ul id="detected"></ul>
+    <div id="biblePane" class="pane">
+      <input id="search" placeholder="Type a reference or words from a verse, e.g. John 3:16 or all is vanity" autocomplete="off">
+      <h2>Detected references</h2>
+      <ul id="detected" class="list"></ul>
+    </div>
+    <div id="songsPane" class="pane" hidden>
+      <div class="songbar">
+        <input id="songSearch" placeholder="Search songs by title or number" autocomplete="off">
+        <button id="newSong">+ New</button>
+      </div>
+      <ul id="songList" class="list"></ul>
+      <h2 id="songTitle"></h2>
+      <ul id="slideList" class="list"></ul>
+    </div>
   </section>
 </main>
+<dialog id="songDialog">
+  <form method="dialog">
+    <h2>New song</h2>
+    <input id="newTitle" placeholder="Title" required maxlength="200">
+    <textarea id="newLyrics" rows="14" placeholder="Paste the lyrics. Leave a blank line between slides." required></textarea>
+    <div class="row">
+      <button value="save">Save</button>
+      <button value="cancel" formnovalidate>Cancel</button>
+    </div>
+  </form>
+</dialog>
 <script src="kjv.js"></script>
 <script src="parse.js"></script>
 <script src="predict.js"></script>
@@ -117,60 +161,98 @@
   document.documentElement.classList.toggle("dock", DOCK);
   let out = null, mini = null, current = null, lastFinal = "";
   let detected = []; // [{ref, predicted, time}], newest first
+  // on screen is either the verse `current` or slide `slide` of `liveSong`; `song` is the one open in the Songs tab
+  let song = null, liveSong = null, slide = null;
+  let edgeListening = false; // dock only: whether the Edge window last said it's listening
   const me = Math.random().toString(36).slice(2);
 
   // ---- projector ----
   // the server relays this to every projector page (popup, OBS Browser Sources) and to the other control pages (OBS dock)
   function send() {
-    const msg = { from: me, ref: current, recent: detected.slice(0, 20) };
+    const msg = { from: me, layout: $("layout").value, ref: current, recent: detected.slice(0, 20), listening: DOCK ? edgeListening : listening };
     if (current) Object.assign(msg, { label: Parse.label(current), lines: Parse.lookup(KJV, current) });
+    else if (slide !== null) msg.song = { ...liveSong, index: slide };
     fetch("/state", { method: "POST", body: JSON.stringify(msg) })
       .catch(() => { $("status").textContent = "VerseCast server isn't running — start it with Start VerseCast.bat"; });
   }
   // follow changes made from another control page, e.g. the OBS dock
-  new EventSource("/events").onmessage = e => {
+  const events = new EventSource(DOCK ? "/events" : "/events?operator");
+  // the dock can't hear (OBS's browser has no speech recognition), so it asks this page to start/stop listening
+  events.addEventListener("command", e => {
+    const { cmd } = JSON.parse(e.data);
+    if (cmd === "listen" && !listening && SR) setListening(true);
+    if (cmd === "stop" && listening) setListening(false);
+  });
+  events.onmessage = e => {
     const msg = JSON.parse(e.data);
+    if (msg && DOCK) showListening(edgeListening = !!msg.listening);
     if (!msg || msg.from === me) return;
     current = msg.ref || null;
     detected = msg.recent || [];
+    $("layout").value = msg.layout || "lower";
+    liveSong = msg.song || liveSong;
+    slide = msg.song ? msg.song.index : null;
+    if (msg.song && !song) openSong(msg.song); // follow along in the Songs tab
     renderDetected();
     refresh(false);
   };
-  // full screen on the 2nd screen when there is one, otherwise a window you can drag
-  $("openOut").onclick = async () => {
+  $("layout").onchange = () => send();
+  // 2nd screen on: full screen there when there is one, otherwise a window you can drag. Off: closes it and stays off.
+  fetch("/settings").then(r => r.json()).then(s => { $("screen2").checked = s.projector; }).catch(() => {});
+  $("screen2").onchange = async e => {
+    if (!e.target.checked) return fetch("/projector/off", { method: "POST" }).catch(() => {});
     const r = await fetch("/projector", { method: "POST" }).catch(() => null);
     if (r && r.ok) return;
     out = window.open("output.html", "versecast-output", "popup,width=1280,height=720");
     if (!out) alert("Your browser blocked the projector window. Allow pop-ups for this page and try again.");
   };
-  if (!DOCK) fetch("/projector", { method: "POST" }).catch(() => {}); // auto-open on the 2nd screen at start-up
 
   function verseText(lines) {
     return lines.map(l => (lines.length > 1 ? l.v + " " : "") + l.text).join(" ");
   }
 
+  // what's on screen as [title, text], or null
+  function onScreen() {
+    if (current) return [Parse.label(current), verseText(Parse.lookup(KJV, current))];
+    if (slide !== null) return [liveSong.name, liveSong.slides[slide].text];
+    return null;
+  }
+
   function refresh(broadcast = true) {
-    const label = current && Parse.label(current);
-    if (current) {
-      $("preview").replaceChildren(verseText(Parse.lookup(KJV, current)), Object.assign(document.createElement("b"), { textContent: label }));
-    } else {
-      $("preview").innerHTML = '<span class="empty">Nothing showing</span>';
-    }
+    const now = onScreen(), label = current && Parse.label(current);
+    if (now) $("preview").replaceChildren(now[1], Object.assign(document.createElement("b"), { textContent: now[0] }));
+    else $("preview").innerHTML = '<span class="empty">Nothing showing</span>';
+    $("preview").style.whiteSpace = slide !== null ? "pre-line" : "";
     for (const li of $("detected").children) li.classList.toggle("live", li.dataset.label === label);
+    const live = slide !== null && song && liveSong && song.id === liveSong.id ? slide : -1;
+    [...$("slideList").children].forEach((li, i) => li.classList.toggle("live", i === live));
     renderMini();
     if (broadcast) send();
   }
 
   function show(ref) {
     if (!Parse.lookup(KJV, ref)) return false;
-    current = ref;
+    current = ref, slide = null;
     refresh();
     return true;
   }
-  function clearScreen() { current = null; refresh(); }
+  function showSlide(i) {
+    if (!liveSong || !liveSong.slides[i]) return;
+    current = null, slide = i;
+    refresh();
+  }
+  function clearScreen() { current = null, slide = null; refresh(); }
+  // tapping the verse or slide that's already showing hides it
+  const toggle = ref => current && Parse.label(current) === Parse.label(ref) ? clearScreen() : show(ref);
+  function toggleSlide(i) {
+    if (slide === i && liveSong && liveSong.id === song.id) return clearScreen();
+    liveSong = song;
+    showSlide(i);
+  }
   $("clear").onclick = clearScreen;
 
   function step(dir) {
+    if (slide !== null) return showSlide(slide + dir);
     if (!current) return;
     const ch = KJV[current.book][current.chapter];
     const v = dir > 0 ? current.verseEnd + 1 : current.verse - 1;
@@ -179,7 +261,7 @@
   $("prev").onclick = () => step(-1);
   $("next").onclick = () => step(1);
   function onKey(e) {
-    if (e.target.tagName === "INPUT") return;
+    if (["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName) || $("songDialog").open) return;
     if (e.key === "ArrowRight") step(1);
     if (e.key === "ArrowLeft") step(-1);
     if (e.key === "Escape") clearScreen();
@@ -206,7 +288,7 @@
       li.classList.toggle("guess", predicted);
       li.append(Parse.label(ref), Object.assign(document.createElement("small"), { textContent: (predicted ? "quoted? · " : "") + time }));
       li.title = Parse.lookup(KJV, ref).map(l => l.text).join(" ");
-      li.onclick = () => show(ref);
+      li.onclick = () => toggle(ref);
       return li;
     }));
   }
@@ -219,6 +301,70 @@
     else if (guesses.length) { guesses.slice().reverse().forEach(g => addDetected(g.ref, true)); show(guesses[0].ref); e.target.value = ""; }
     else e.target.style.borderColor = "#d62839", setTimeout(() => e.target.style.borderColor = "", 800);
   });
+
+  // ---- songs: FreeShow library + songs pasted into VerseCast ----
+  let allSongs = [];
+  function setTab(tab) {
+    $("biblePane").hidden = tab !== "bible";
+    $("songsPane").hidden = tab !== "songs";
+    $("tabBible").classList.toggle("on", tab === "bible");
+    $("tabSongs").classList.toggle("on", tab === "songs");
+    if (tab === "songs" && !allSongs.length) loadSongs();
+  }
+  $("tabBible").onclick = () => setTab("bible");
+  $("tabSongs").onclick = () => setTab("songs");
+
+  async function loadSongs() {
+    allSongs = await fetch("/songs").then(r => r.json()).catch(() => []);
+    renderSongList();
+  }
+
+  function renderSongList() {
+    const q = $("songSearch").value.trim().toLowerCase();
+    const hits = allSongs.filter(s => !q || s.name.toLowerCase().includes(q) || s.number === q).slice(0, 100);
+    $("songList").replaceChildren(...hits.map(s => {
+      const li = document.createElement("li");
+      li.append(s.name, Object.assign(document.createElement("small"), { textContent: [s.number && "#" + s.number, s.source].filter(Boolean).join(" · ") }));
+      li.onclick = () => openSong(s);
+      return li;
+    }));
+  }
+  $("songSearch").oninput = renderSongList;
+  // Enter opens the top match
+  $("songSearch").addEventListener("keydown", e => { if (e.key === "Enter" && $("songList").firstChild) $("songList").firstChild.click(); });
+
+  async function openSong(s) {
+    song = s.slides ? s : await fetch("/song?id=" + encodeURIComponent(s.id)).then(r => r.ok ? r.json() : null).catch(() => null);
+    if (!song) return;
+    const del = song.source === "VerseCast" && Object.assign(document.createElement("button"), { textContent: "Delete", onclick: deleteSong });
+    $("songTitle").replaceChildren(song.name, ...(del ? [del] : []));
+    $("slideList").replaceChildren(...song.slides.map((sl, i) => {
+      const li = document.createElement("li");
+      li.textContent = sl.text;
+      li.onclick = () => toggleSlide(i);
+      return li;
+    }));
+    refresh(false);
+  }
+
+  async function deleteSong() {
+    if (!confirm(`Delete "${song.name}" from VerseCast?`)) return;
+    await fetch("/song?id=" + encodeURIComponent(song.id), { method: "DELETE" });
+    song = null;
+    $("songTitle").replaceChildren();
+    $("slideList").replaceChildren();
+    loadSongs();
+  }
+
+  $("newSong").onclick = () => { $("newTitle").value = $("newLyrics").value = ""; $("songDialog").showModal(); };
+  $("songDialog").onclose = async () => {
+    if ($("songDialog").returnValue !== "save") return;
+    const r = await fetch("/songs", { method: "POST", body: JSON.stringify({ name: $("newTitle").value, lyrics: $("newLyrics").value }) }).catch(() => null);
+    if (!r || !r.ok) return alert("Couldn't save the song. Check it has a title and lyrics.");
+    const { id } = await r.json();
+    await loadSongs();
+    openSong({ id });
+  };
 
   // ---- always-on-top mini window (Document Picture-in-Picture, Edge/Chrome) ----
   $("openMini").onclick = async () => {
@@ -236,8 +382,9 @@
   function renderMini() {
     if (!mini) return;
     const d = mini.document, el = (tag, props, ...kids) => { const n = Object.assign(d.createElement(tag), props); n.append(...kids); return n; };
-    const now = current
-      ? el("div", { className: "now" }, el("b", { textContent: Parse.label(current) }), verseText(Parse.lookup(KJV, current)))
+    const shown = onScreen();
+    const now = shown
+      ? el("div", { className: "now", style: "white-space: pre-line" }, el("b", { textContent: shown[0] }), shown[1])
       : el("div", { className: "now" }, el("span", { className: "empty", textContent: "Nothing showing" }));
     const label = current && Parse.label(current);
     d.body.replaceChildren(
@@ -248,7 +395,7 @@
         el("button", { textContent: "Clear", onclick: clearScreen }),
         el("button", { textContent: listening ? "Stop" : "Listen", className: "listen" + (listening ? " on" : ""), onclick: () => $("listen").click() })),
       el("div", { className: "chips" }, ...detected.slice(0, 6).map(({ ref }) =>
-        el("button", { textContent: Parse.label(ref), className: Parse.label(ref) === label ? "live" : "", onclick: () => show(ref) }))));
+        el("button", { textContent: Parse.label(ref), className: Parse.label(ref) === label ? "live" : "", onclick: () => toggle(ref) }))));
   }
 
   // ---- speech ----
@@ -293,12 +440,17 @@
     $("transcript").scrollTop = $("transcript").scrollHeight;
   }
 
-  function setListening(on) {
-    listening = on;
+  function showListening(on) {
     $("listen").textContent = on ? "Stop listening" : "Start listening";
     $("listen").classList.toggle("on", on);
     $("status").textContent = on ? "Listening…" : "Not listening";
+  }
+
+  function setListening(on) {
+    listening = on;
+    showListening(on);
     renderMini();
+    send(); // lets the OBS dock show whether we're listening
     if (on) {
       rec = new SR();
       rec.continuous = true;
@@ -369,7 +521,12 @@
     if (listening) { setListening(false); setListening(true); }
   };
   loadMics();
-  $("listen").onclick = () => {
+  $("listen").onclick = async () => {
+    if (DOCK) { // the dock remote-controls the Edge window, which does the listening
+      const r = await fetch("/command", { method: "POST", body: JSON.stringify({ cmd: $("listen").classList.contains("on") ? "stop" : "listen" }) }).catch(() => null);
+      if (!r || !r.ok) $("status").textContent = "Open VerseCast in Edge first";
+      return;
+    }
     if (!SR) return alert("Speech recognition needs Microsoft Edge or Google Chrome.");
     setListening(!listening);
   };

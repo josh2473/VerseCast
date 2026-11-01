@@ -1,12 +1,23 @@
 // Serves VerseCast on http://localhost:8765 — Edge/Chrome only allow speech recognition on http(s), not file://.
 // Also relays what's on screen: the operator POSTs /state, every projector page (popup, OBS Browser Source) listens on /events.
 const http = require("http"), fs = require("fs"), path = require("path"), { execFile, spawn } = require("child_process");
+const Songs = require("./songs.js");
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8" };
 const EDGE = path.join(process.env["ProgramFiles(x86)"], "Microsoft", "Edge", "Application", "msedge.exe");
 
 let state = "null";
 const listeners = new Set();
+
+// remembered across restarts, e.g. whether the 2nd-screen projector should be open
+const SETTINGS = path.join(process.env.LOCALAPPDATA, "VerseCast", "settings.json");
+const settings = { projector: true };
+try { Object.assign(settings, JSON.parse(fs.readFileSync(SETTINGS, "utf8"))); } catch {}
+function saveSettings() {
+  fs.mkdirSync(path.dirname(SETTINGS), { recursive: true });
+  fs.writeFileSync(SETTINGS, JSON.stringify(settings));
+}
 const projectors = new Set(); // /events connections from the 2nd-screen projector window
+const operators = new Set();  // /events connections from the main VerseCast page in Edge (the one that can listen)
 
 const ps = (cmd, cb) => execFile("powershell", ["-NoProfile", "-Command", cmd], (err, out) => cb(err ? null : out.trim() || null));
 
@@ -43,21 +54,46 @@ function openProjector(cb) {
   });
 }
 
+const sendJson = (res, data) => res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(data));
+function readBody(req, res, done) {
+  let body = "";
+  req.on("data", c => { body += c; if (body.length > 1e6) req.destroy(); });
+  req.on("end", () => { try { done(JSON.parse(body)); } catch { res.writeHead(400).end(); } });
+}
+
 http.createServer((req, res) => {
   const url = req.url.split("?")[0];
+  const id = new URL(req.url, "http://localhost").searchParams.get("id") || "";
 
-  if (url === "/projector" && req.method === "POST") return openProjector(ok => res.writeHead(ok ? 204 : 404).end());
+  if (url === "/settings") return sendJson(res, settings);
+
+  // songs: FreeShow library (read-only) + songs pasted into VerseCast
+  if (url === "/songs" && req.method === "GET") return sendJson(res, Songs.list(settings.freeshowShows));
+  if (url === "/song" && req.method === "GET") {
+    const song = Songs.get(id, settings.freeshowShows);
+    return song ? sendJson(res, song) : res.writeHead(404).end();
+  }
+  if (url === "/songs" && req.method === "POST") {
+    return readBody(req, res, b => { const newId = Songs.add(b && b.name, b && b.lyrics); newId ? sendJson(res, { id: newId }) : res.writeHead(400).end(); });
+  }
+  if (url === "/song" && req.method === "DELETE") return res.writeHead(Songs.remove(id) ? 204 : 404).end();
+
+  // turn the 2nd-screen projector on (404 = no 2nd screen) / off
+  if (url === "/projector" && req.method === "POST") {
+    settings.projector = true, saveSettings();
+    return openProjector(ok => res.writeHead(ok ? 204 : 404).end());
+  }
+  if (url === "/projector/off" && req.method === "POST") {
+    settings.projector = false, saveSettings(), launchedAt = 0;
+    return ps(KILL_OLD, () => res.writeHead(204).end());
+  }
 
   if (url === "/state" && req.method === "POST") {
-    let body = "";
-    req.on("data", c => { body += c; if (body.length > 1e6) req.destroy(); });
-    req.on("end", () => {
-      try { JSON.parse(body); } catch { return res.writeHead(400).end(); }
-      state = body;
+    return readBody(req, res, msg => {
+      state = JSON.stringify(msg);
       for (const l of listeners) l.write(`data: ${state}\n\n`);
       res.writeHead(204).end();
     });
-    return;
   }
 
   if (url === "/events") {
@@ -65,8 +101,18 @@ http.createServer((req, res) => {
     res.write(`data: ${state}\n\n`);
     listeners.add(res);
     if (req.url.includes("screen2")) projectors.add(res), keepOnTop();
-    req.on("close", () => { listeners.delete(res); projectors.delete(res); });
+    if (req.url.includes("operator")) operators.add(res);
+    req.on("close", () => { listeners.delete(res); projectors.delete(res); operators.delete(res); });
     return;
+  }
+
+  // remote control from the OBS dock, e.g. {cmd: "listen"}; 404 = VerseCast isn't open in Edge to carry it out
+  if (url === "/command" && req.method === "POST") {
+    return readBody(req, res, msg => {
+      if (!operators.size) return res.writeHead(404).end();
+      for (const o of operators) o.write(`event: command\ndata: ${JSON.stringify(msg)}\n\n`);
+      res.writeHead(204).end();
+    });
   }
 
   const file = path.join(__dirname, path.normalize(decodeURIComponent(url)).replace(/^[\\/]+$/, "index.html"));
@@ -79,5 +125,5 @@ http.createServer((req, res) => {
   .on("error", e => { if (e.code === "EADDRINUSE") process.exit(0); throw e; }) // already running from an earlier launch
   .listen(8765, "127.0.0.1", () => {
     console.log("VerseCast running at http://localhost:8765 - keep this window open");
-    openProjector(() => {}); // the projector closes with the server, so bring it back whenever the server starts
+    if (settings.projector) openProjector(() => {}); // the projector closes with the server, so bring it back on start
   });

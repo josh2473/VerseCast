@@ -18,7 +18,7 @@ Live scripture for church services. VerseCast listens to the preacher, spots Bib
 
 Download: **Code → Download ZIP** at the top of this page, then unzip it anywhere (e.g. your Desktop).
 
-Double-click **Start VerseCast.bat**. It starts a small local server (keep its minimized window open) and opens VerseCast in Edge. If a second screen is connected, the projector opens full screen on it.
+Double-click **Start VerseCast.bat**. It starts a small local server (keep its minimized window open) and opens VerseCast in Edge. Tick **2nd screen** to put the projector full screen on your second screen; untick it if you only use OBS. VerseCast remembers the choice.
 
 Click **Start listening**, allow the microphone, and choose your input and accent from the drop-downs.
 
@@ -28,6 +28,12 @@ Click **Start listening**, allow the microphone, and choose your input and accen
 | Esc | Clear the screen |
 | Search box | Type a reference (`Romans 8:28-30`) or words from a verse (`the lord is my shepherd`) |
 | Detected references | Click to show. Grey "quoted?" items are guesses from quoted words and are never shown automatically |
+
+## Songs and hymns
+
+Open the **Songs** tab. VerseCast reads your **FreeShow** song library automatically (read-only; it finds FreeShow's Shows folder, including under OneDrive), and **+ New** lets you paste lyrics straight into VerseCast — leave a blank line between slides. Search by title or hymn number, click a slide to show it, ←/→ to move, click the showing slide again to hide it.
+
+Lyrics you add are yours to manage: modern worship songs usually need your church's CCLI (or similar) licence to be projected or streamed.
 
 ## OBS
 
@@ -39,7 +45,9 @@ Or add a **Browser** source yourself, 1920×1080:
 - Lower third: `http://localhost:8765/output.html?overlay`
 - Full screen: `http://localhost:8765/output.html`
 
-**Control dock:** **Docks → Custom Browser Docks**, name `VerseCast`, URL `http://localhost:8765/?dock`. The dock and the Edge window stay in sync. Listening has to run in the Edge window, because OBS's built-in browser has no speech recognition.
+**Control dock:** **Docks → Custom Browser Docks**, name `VerseCast`, URL `http://localhost:8765/?dock`. The dock and the Edge window stay in sync. The dock's **Start listening** button works as long as VerseCast is open in Edge (OBS's built-in browser has no speech recognition, so Edge does the listening).
+
+The **Lower third / Full screen** switch changes how verses and songs look in OBS: a lower third over your video, or big centred text over a dimmed picture.
 
 ### NDI
 
