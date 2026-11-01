@@ -50,6 +50,16 @@
   .dock section { padding: 8px; }
   .dock #preview { font-size: 14px; min-height: 70px; max-height: 30vh; }
   .dock .row { margin-bottom: 8px; }
+  /* OBS's default dark (Yami) theme colours, so it sits in with the other docks (OBS shows a "transparent" dock as white) */
+  .dock, .dock body { background: #1d1f26; }
+  .dock header, .dock main, .dock section { background: transparent; }
+  .dock body { color: #e6e6e6; }
+  .dock h2, .dock #status, .dock #detected li.guess:not(.live) { color: #9aa3b5; }
+  .dock #search { background: #1d1f26; border-color: #3c404b; color: #e6e6e6; }
+  .dock #preview { background: #2b2e38; }
+  .dock button, .dock .row button { background: #3c404b; border-color: #3c404b; color: #fff; }
+  .dock button:hover, .dock .row button:hover, .dock #detected li:hover { background: #4a4f5c; }
+  .dock #detected li.live { background: #284cb8; }
 
   /* always-on-top mini window */
   .mini { margin: 0; padding: 10px; height: 100vh; display: flex; flex-direction: column; gap: 8px; }

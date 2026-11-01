@@ -12,7 +12,7 @@ local SOURCES = {
 function script_description()
   return [[<h2>VerseCast</h2>
 <p>Live scripture on screen: VerseCast listens to the sermon, spots Bible references and quotes, and shows the verse.</p>
-<p>Start VerseCast first (<b>Start VerseCast.bat</b>), then use the buttons below to add it to the current scene.</p>
+<p>Start VerseCast first (<b>Start VerseCast.bat</b>), then use the buttons below to add it to the current scene (the Preview scene in Studio Mode).</p>
 <p><b>Control dock:</b> Docks &gt; Custom Browser Docks, name <b>VerseCast</b>, URL <b>http://localhost:8765/?dock</b></p>]]
 end
 
@@ -32,9 +32,15 @@ function script_properties()
   return props
 end
 
--- Adds the browser source to the current scene, creating it the first time; reuses it if it already exists.
+-- Adds the browser source to the current scene (the Preview scene in Studio Mode, so nothing changes on air),
+-- creating it the first time; reuses it if it already exists.
 function add_to_scene(kind)
-  local scene_source = obs.obs_frontend_get_current_scene()
+  local scene_source
+  if obs.obs_frontend_preview_program_mode_active() then
+    scene_source = obs.obs_frontend_get_current_preview_scene()
+  else
+    scene_source = obs.obs_frontend_get_current_scene()
+  end
   if scene_source == nil then return end
   local scene = obs.obs_scene_from_source(scene_source)
 
