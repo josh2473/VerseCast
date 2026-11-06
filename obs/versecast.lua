@@ -41,8 +41,11 @@ end
 
 function script_load(settings)
   if obs.obs_data_get_bool(settings, "autostart") then start_versecast() end
+  -- SCRIPTING_SHUTDOWN: OBS unloads scripts before it sends EXIT, so EXIT alone never reaches us
   obs.obs_frontend_add_event_callback(function(event)
-    if event == obs.OBS_FRONTEND_EVENT_EXIT and autostart then stop_versecast() end
+    if autostart and (event == obs.OBS_FRONTEND_EVENT_SCRIPTING_SHUTDOWN or event == obs.OBS_FRONTEND_EVENT_EXIT) then
+      stop_versecast()
+    end
   end)
 end
 
