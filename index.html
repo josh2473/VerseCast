@@ -52,7 +52,7 @@
   #transcript mark.guess { background: #fff; border: 1px dashed var(--blue); }
   @media (max-width: 700px) { main { grid-template-columns: 1fr; } }
 
-  /* ?dock — OBS custom browser dock. OBS's browser can't do speech recognition, so listening stays in Edge. */
+  /* ?dock — OBS custom browser dock. OBS's browser can't do speech recognition, so listening stays in Chrome. */
   .dock body { font-size: 13px; }
   .dock header { padding: 6px 8px; gap: 6px; }
   .dock header h1 { font-size: 14px; }
@@ -163,7 +163,7 @@
   let detected = []; // [{ref, predicted, time}], newest first
   // on screen is either the verse `current` or slide `slide` of `liveSong`; `song` is the one open in the Songs tab
   let song = null, liveSong = null, slide = null;
-  let edgeListening = false; // dock only: whether the Edge window last said it's listening
+  let edgeListening = false; // dock only: whether the main (Chrome) window last said it's listening
   const me = Math.random().toString(36).slice(2);
 
   // ---- projector ----
@@ -182,6 +182,7 @@
     const { cmd } = JSON.parse(e.data);
     if (cmd === "listen" && !listening && SR) setListening(true);
     if (cmd === "stop" && listening) setListening(false);
+    if (cmd === "close") { if (listening) setListening(false); window.close(); } // OBS closed
   });
   events.onmessage = e => {
     const msg = JSON.parse(e.data);
@@ -522,12 +523,13 @@
   };
   loadMics();
   $("listen").onclick = async () => {
-    if (DOCK) { // the dock remote-controls the Edge window, which does the listening
+    if (DOCK) { // the dock remote-controls the main VerseCast window in Chrome, which does the listening
       const r = await fetch("/command", { method: "POST", body: JSON.stringify({ cmd: $("listen").classList.contains("on") ? "stop" : "listen" }) }).catch(() => null);
-      if (!r || !r.ok) $("status").textContent = "Open VerseCast in Edge first";
+      if (!r || !r.ok) $("status").textContent = "Opening VerseCast in Chrome… press again in a moment";
+      if (r && r.status === 404) fetch("/open", { method: "POST" });
       return;
     }
-    if (!SR) return alert("Speech recognition needs Microsoft Edge or Google Chrome.");
+    if (!SR) return alert("Speech recognition needs Google Chrome or Microsoft Edge.");
     setListening(!listening);
   };
 </script>

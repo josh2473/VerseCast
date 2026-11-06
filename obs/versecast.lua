@@ -1,8 +1,9 @@
 -- VerseCast for OBS: adds the live scripture lower third / full-screen slide to the current scene.
--- Install: OBS > Tools > Scripts > + > pick this file. VerseCast itself must be running (Start VerseCast.bat).
+-- Install: OBS > Tools > Scripts > + > pick this file. It starts VerseCast when OBS starts (can be turned off).
 obs = obslua
 
 local base_url = "http://localhost:8765"
+local autostart = true
 
 local SOURCES = {
   overlay = { name = "VerseCast Lower Third", path = "/output.html?overlay" },
@@ -12,20 +13,43 @@ local SOURCES = {
 function script_description()
   return [[<h2>VerseCast</h2>
 <p>Live scripture on screen: VerseCast listens to the sermon, spots Bible references and quotes, and shows the verse.</p>
-<p>Start VerseCast first (<b>Start VerseCast.bat</b>), then use the buttons below to add it to the current scene (the Preview scene in Studio Mode).</p>
+<p>VerseCast starts with OBS and closes when OBS closes (or click <b>Start VerseCast now</b>). Use the buttons below to add it to the current scene (the Preview scene in Studio Mode).</p>
 <p><b>Control dock:</b> Docks &gt; Custom Browser Docks, name <b>VerseCast</b>, URL <b>http://localhost:8765/?dock</b></p>]]
 end
 
 function script_defaults(settings)
   obs.obs_data_set_default_string(settings, "url", base_url)
+  obs.obs_data_set_default_bool(settings, "autostart", true)
 end
 
 function script_update(settings)
   base_url = obs.obs_data_get_string(settings, "url"):gsub("/+$", "")
+  autostart = obs.obs_data_get_bool(settings, "autostart")
+end
+
+-- Runs Start VerseCast.bat from the folder above this script. Safe to repeat: VerseCast only ever opens one window.
+function start_versecast()
+  local folder = script_path():gsub("[/\\]obs[/\\]?$", ""):gsub("/", "\\")
+  -- cmd /c so the launcher's console closes when it's done (a bare .bat would stay open as cmd /k)
+  os.execute('start "" /min cmd /c "' .. folder .. '\\Start VerseCast.bat"')
+end
+
+-- Asks VerseCast to close its window and projector and stop (curl ships with Windows 10 and 11).
+function stop_versecast()
+  os.execute('curl -s -m 3 -X POST ' .. base_url .. '/quit')
+end
+
+function script_load(settings)
+  if obs.obs_data_get_bool(settings, "autostart") then start_versecast() end
+  obs.obs_frontend_add_event_callback(function(event)
+    if event == obs.OBS_FRONTEND_EVENT_EXIT and autostart then stop_versecast() end
+  end)
 end
 
 function script_properties()
   local props = obs.obs_properties_create()
+  obs.obs_properties_add_bool(props, "autostart", "Start VerseCast with OBS and close it when OBS closes")
+  obs.obs_properties_add_button(props, "start_now", "Start VerseCast now", function() start_versecast() return true end)
   obs.obs_properties_add_text(props, "url", "VerseCast address", obs.OBS_TEXT_DEFAULT)
   obs.obs_properties_add_button(props, "add_overlay", "Add lower third to current scene", function() add_to_scene(SOURCES.overlay) return true end)
   obs.obs_properties_add_button(props, "add_full", "Add full-screen slide to current scene", function() add_to_scene(SOURCES.full) return true end)

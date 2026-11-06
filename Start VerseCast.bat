@@ -1,5 +1,3 @@
 @echo off
-rem Speech recognition needs Edge or Chrome on http://localhost (not a file), so start the local server first.
+rem Starts the VerseCast server (minimized). It opens VerseCast in Chrome (or Edge) itself, unless it's already open.
 start "VerseCast server" /min node "%~dp0server.js"
-timeout /t 1 /nobreak >nul
-start "" msedge "http://localhost:8765/"
