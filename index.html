@@ -157,7 +157,8 @@
 <script>
   const $ = id => document.getElementById(id);
   const INDEX = Predict.buildIndex(KJV);
-  const DOCK = new URLSearchParams(location.search).has("dock"); // compact layout for an OBS custom browser dock
+  // compact OBS-themed layout inside OBS (its browser adds "OBS/<version>" to the user agent), or with ?dock
+  const DOCK = new URLSearchParams(location.search).has("dock") || /\bOBS\//.test(navigator.userAgent) || "obsstudio" in window;
   document.documentElement.classList.toggle("dock", DOCK);
   let out = null, mini = null, current = null, lastFinal = "";
   let detected = []; // [{ref, predicted, time}], newest first
